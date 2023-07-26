@@ -44,6 +44,27 @@ static void curl_init(lua_State *L)
         break;
         case 3:
         /* chunked transfer */
+        target_ip = lua_tostring(L, 2);
+        send_data = lua_tostring(L, 3); 
+        if(curl)
+        {
+            CURLcode ret;
+            curl_easy_setopt(curl, CURLOPT_URL, target_ip);
+            curl_easy_setopt(curl, CURLOPT_POST, 1L);
+            hs = curl_slist_append(chunk, "Transfer-Encoding: chunked");
+            hs =  curl_slist_append(hs, "Content-Type: application/octet-stream");
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hs);
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, send_data);
+            printf("set option\n");
+            ret = curl_easy_perform(curl);
+            printf("post send\n");
+            if(ret != CURLE_OK)
+            {
+                curl_easy_strerror(ret);
+            }
+            curl_slist_free_all(hs);
+            curl_easy_cleanup(curl);
+        }
         break;
     }  
 }

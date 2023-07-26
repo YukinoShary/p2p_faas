@@ -11,7 +11,7 @@
 extern int send_client (char *server, int portno);
 extern int fdopen_sock (int sock, FILE **inp, FILE **outp);
 int tcp_connect (char *server, int portno);
-int sendfd_open(char* filename, FILE** file_fd);
+int fdopen_file(char* filename, FILE** file_fd);
 
 int main (int argc, char *argv[])
 {
@@ -33,7 +33,7 @@ int main (int argc, char *argv[])
 int send_client(char *server, char* filename, int portno)
 {
   int sock;
-  ssize_t len;
+  ssize_t send_size;
   char sbuf[BUFFERSIZE];
   FILE *out, *file_fd;
   
@@ -42,8 +42,8 @@ int send_client(char *server, char* filename, int portno)
     exit (-1);
   }
   
-  if(sendfd_open(filename, file_fd) < 0){
-    fprintf(stderr, "sendfd_open()\n");
+  if(fdopen_file(filename, file_fd) < 0){
+    fprintf(stderr, "fdopen_file()\n");
     exit(1);
   }
 
@@ -51,10 +51,14 @@ int send_client(char *server, char* filename, int portno)
     fprintf(stderr, "fdopen()\n");
     exit(1);
   }
-  
+
+  /* wait for sending signal(data page) and clear buffer*/
+  recv(sock, sbuf, BUFFERSIZE, 0);
+  memset(sbuf, 0, BUFFERSIZE);
+
   /* gets buffer */
   while (fread(sbuf, 1, BUFFERSIZE, file_fd)) {
-    ssize_t send_size;
+    
     send_size = send(sock, sbuf, BUFFERSIZE, 0);
     if(send_size == -1){
       perror("error while sending data.\n");
@@ -123,7 +127,7 @@ int fdopen_sock(int sock, FILE **outp)
   return(0);
 }
 
-int sendfd_open(char* filename, FILE** file_fd)
+int fdopen_file(char* filename, FILE** file_fd)
 {
   *file_fd = fopen(filename, "rb");
   if(*file_fd == NULL)
