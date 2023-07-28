@@ -23,7 +23,7 @@ typedef struct request
 
 typedef struct data_node
 {
-    char *data;
+    const char *data;
     size_t data_lengh;
     struct data_node *prev, *next;
 } data_node;
@@ -36,33 +36,16 @@ typedef struct data_queue
 
 static struct data_queue* queue;
 static struct mg_mgr mgr;
+static int running_sig;
 
 static void mongoose_start(lua_State* L);
 static void mongoose_stop();
 static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data);
 static void multipart_processing(struct mg_connection *c, char* data);
-static int allowed_ip(char *ip, char *nodes_tb[]);
+//static int allowed_ip(char *ip, char *nodes_tb[]);
 static void set_data(const char* result);
 static int get_data(lua_State* L);
-static queue_node* queue_dequeue();
 int luaopen_p2p_server(lua_State *L);
-
-static queue_node* queue_dequeue()
-{
-    queue_node* de = queue->head;
-    if(queue->length == 0)
-    {
-        perror("queue is empty!\n");
-        return NULL;
-    }
-    else
-    {
-        queue->head = de->next;
-        queue->head->prev = NULL;
-    }
-    queue->length --;
-    return de;
-}
 
 /*initialize a server program and start it*/
 static void mongoose_start(lua_State* L)
@@ -73,6 +56,7 @@ static void mongoose_start(lua_State* L)
     queue->head = NULL;
     queue->rear = NULL;
     printf("start to intialize a server\n");
+    running_sig = 1;
     char *ip_table[MAXNODES_PER_PIPELINE];
     n = luaL_checknumber(L, 1);
     if(!lua_istable(L, 2))
@@ -85,19 +69,21 @@ static void mongoose_start(lua_State* L)
     }
     lua_settop(L, 0);
     
-    mg_mgr_init(&mgr);                                        // Init manager4
-    mg_http_listen(&mgr, "http://0.0.0.0:8080", fn, &mgr);  // Setup listener
+    mg_mgr_init(&mgr);                                       // Init manager4
+    printf("try to start server\n");
+    mg_http_listen(&mgr, "http://0.0.0.0:8082", fn, NULL);  // Setup listener, the ip_table should be sent as the las parameter in final version.
     printf("server started\n");
-    while(1)
+    while(running_sig)
     {
         mg_mgr_poll(&mgr, 1000);                         // Event loop
-    }
+    }  
+    mg_mgr_free(&mgr); 
 }
 
 /*stop the server program and release the resource*/
 static void mongoose_stop(lua_State* L)
 {
-    MHD_stop_daemon(daemon_);
+    mg_mgr_free(&mgr); 
     printf("server stop\n");
 }
 
@@ -106,68 +92,67 @@ static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data)
 {
     int ack;
     struct mg_http_message *hm;
-    char *content_type;
-    size_t content_length; 
-    printf("get request\n");
-    if(!allowed_ip(url, (char **)cls))
+    struct mg_str *content_type *content_length;
+    char *type_str;
+    size_t data_size;
+    const char *recv_data;
+
+    /*
+    if(!allowed_ip((c->rem)., fn_data)
     {
         printf("from the umknown ip.\n");
         mg_http_reply(c, 403, "", "%s", "Invalidated node\n");
     }
-    
-    *hm = (struct mg_http_message *) ev_data;
-    if(strcmp(hm->method->p, "POST");
+    */
+    if(ev == MG_EV_HTTP_MSG)
     {
+        hm = (struct mg_http_message *) ev_data;
         content_type = mg_http_get_header(hm, "Content-Type");
-        if(ev == MG_EV_HTTP_MSG)
+        content_length = mg_http_get_header(hm, "Content-Length");
+        sscanf(content_length->ptr, "%zu", &data_size);
+        recv_data = malloc(atoi(content_length->ptr));
+        memcpy(recv_data, hm->body.ptr, data_size);
+        emcpy(type_str, content_type->ptr, content_type->len);
+        printf("content_type:%s", content_type->ptr);
+        printf("ret:%d", ret);
+        if(strcmp(content_type->ptr, "application/octet-stream") == 0)
         {
-            if(strcmp(content_type, "application/octet-stream") == 0)
-            {
-                ack = 1;
-                set_data(hm->body.ptr);
-                mg_http_reply(c, 200, NULL, ack);
-            }
-            else if(strcmp(content_type, "multipart/form-data") == 0)
-            {
-                multipart_processing(c, hm->body.ptr);
-                ack = 2;
-                mg_http_reply(c, 200, NULL, ack);
-            }
-            else if(strcmp(content_type, "text/plain") == 0)
-            {
-                set_data(hm->body.ptr);
-                content_length = hm->body.len;
-                ack = 3;
-                mg_http_reply(c, 200, NULL, ack);
-            }
+            printf("application/octet-stream");
+            ack = 1;
+            set_data(recv_data);
+            mg_http_reply(c, 200, "", "{%m:%d}\n", MG_ESC("status"), ack); 
         }
-        /*  send the original HTTP chunked data to lua stack
-        else if(ev == MG_EV_HTTP_CHUNK)
+        else if(strcmp(content_type->ptr, "multipart/form-data") == 0)
         {
-            struct data_node node;
-            node = malloc(sizeof(data_node));
-            if(connection_count > 8)
-            {
-                perror("too many connection\n");
-            }
-            set_data(hm->chunk.ptr);
+            printf("multipart/form-data\r\n");
+            multipart_processing(c, recv_data);
+            ack = 2;
+            mg_http_reply(c, 200, "", "{%m:%d}\n", MG_ESC("status"), ack); 
         }
-        */
-        if((!content_type))
+        else if(strcmp(content_type->ptr, "text/plain") == 0)
         {
-            perror("failed to get the content_type\n");
-            return;
+            printf("text/plain\n");
+            printf("body:%s\n", hm->body.ptr);
+            set_data(recv_data);
+            ack = 3;
+            mg_http_reply(c, 200, "", "{%m:%d}\n", MG_ESC("status"), ack); 
         }
+        running_sig = 0;
+        printf("finished\n");
     }
 }
+
 
 static void multipart_processing(struct mg_connection *c, char* data)
 {
     
 }
 
-/*ip white list*/
-static int allowed_ip(char *ip, char *nodes_tb[])
+
+/*ip white list
+  the ip address of mg_addr is in network byte order (big endian)*/
+/*
+static int allowed_ip(uint8_t ip[], char *nodes_tb[])
 {
     int i;
     for(i = 0; i < MAXNODES_PER_PIPELINE; i++)
@@ -178,6 +163,7 @@ static int allowed_ip(char *ip, char *nodes_tb[])
     }
     return 0;
 }
+*/
 
 /*push received data to the lua stack*/
 static void set_data(const char *result)
@@ -185,15 +171,16 @@ static void set_data(const char *result)
     struct data_node *node;
     node = malloc(sizeof(data_node));
     node->data = result;
+    printf("set data:%s\n", node->data);
     node->prev = queue->rear;
     node->next = NULL;
+    queue->rear = node;
     queue->length ++;
     if(queue->length == 1)
     {
         queue->head = node;
-        queue->rear = node;
+        printf("set data as head\n");
     }
-    queue->rear = node;
 }
 
 static int get_data(lua_State* L)
@@ -203,12 +190,16 @@ static int get_data(lua_State* L)
     {
         if(queue->length > 0)
         {
+            data_node *node;
             printf("data exist\n");
-            lua_pushstring(L, queue->head->data);
-            queue->head = queue->head->next;
-            free(queue->head->prev);
-            queue->head->prev = NULL;
+            node = queue->head;
+            printf("data:%s\n", node->data);
+            lua_pushstring(L, node->data);
+            queue->head = node->next;
             queue->length --;
+            if(queue->length != 0)
+                queue->head->prev = NULL;
+            free(node);
             break;
         }
     }
@@ -217,8 +208,8 @@ static int get_data(lua_State* L)
 
 static const struct luaL_Reg reg_funcs[] = 
 {
-    {"serv_start", microhttpd_start},
-    {"serv_stop", microhttpd_stop},
+    {"serv_start", mongoose_start},
+    {"serv_stop", mongoose_stop},
     {"get_data", get_data},
     {NULL, NULL}
 };

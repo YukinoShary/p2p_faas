@@ -153,6 +153,7 @@ int selectSolution(int sockfd)
                     timeout->tv_usec = 0;
                     if (ret = transfer_func(atv_socs[j], ip_table) == 1)
                     {
+                        //transfer finished
                         gettimeofday(end_t, NULL);
                         finished ++;
                     }
@@ -175,7 +176,7 @@ int selectSolution(int sockfd)
         }      
     }
 
-    if(timeval_subtract(time_result, start_t, end_t) == 1)
+    if(timeval_subtract(time_result, end_t, start_t) == 1)
     {
         printf("ERROR during computing esplased time.\n");
     }
