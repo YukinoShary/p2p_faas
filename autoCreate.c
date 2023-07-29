@@ -22,6 +22,7 @@ int main(int argc, char *argv[])
         FILE *fp;
         fp = fopen(argv[i], "wb");
         start = clock();
+        printf("size:%d\n", 100*(1 << 20));
         while(size < 100*(2 << 20))
         {
             for(int j = 0; j <= (bufferSize - 1); j++)
