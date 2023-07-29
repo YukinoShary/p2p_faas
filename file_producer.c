@@ -8,8 +8,8 @@
 #include <string.h>      /* memset */
 
 #define BUFFERSIZE 4096
-extern int send_client (char *server, int portno);
-extern int fdopen_sock (int sock, FILE **inp, FILE **outp);
+int send_client (char *server, char* filename, int portno);
+int fdopen_sock(int sock, FILE **outp);
 int tcp_connect (char *server, int portno);
 int fdopen_file(char* filename, FILE** file_fd);
 
@@ -27,7 +27,7 @@ int main (int argc, char *argv[])
   printf("portno %d\n", portno);
   filename = argv[3];
   printf("filename %s\n", filename);
-  send_client(server, portno);
+  send_client(server, filename, portno);
 }
 
 int send_client(char *server, char* filename, int portno)
@@ -57,12 +57,14 @@ int send_client(char *server, char* filename, int portno)
   memset(sbuf, 0, BUFFERSIZE);
 
   /* gets buffer */
-  while (fread(sbuf, 1, BUFFERSIZE, file_fd)) {
-    
+  while (fread(sbuf, 1, BUFFERSIZE, file_fd)) 
+  {
     send_size = send(sock, sbuf, BUFFERSIZE, 0);
-    if(send_size == -1){
+    if(send_size == -1)
+    {
       perror("error while sending data.\n");
       return -1;
+    }
   }
   fclose(file_fd);
   fclose(out);

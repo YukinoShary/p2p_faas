@@ -11,12 +11,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <sys/time.h>
 #define MaxConnection 4
+#define BUFFERSIZE 4096
 
 typedef struct pipeline_ip
 {
-    node_ip *head;
-    node_ip *rear;
+    struct node_ip *head;
+    struct node_ip *rear;
 } pipeline_ip;
 
 typedef struct node_ip
@@ -32,7 +34,8 @@ typedef struct active_soc
     in_addr_t ip;
 } active_soc;
 
-struct pipeline_ip ip_table[2]; //3 pipelines to be controlled
+char *buffer;
+struct pipeline_ip *ip_table[2]; //3 pipelines to be controlled
 struct timeval *start_t, *end_t, *time_result;
 int selectSolution(int sockfd);
 int transfer_func(struct active_soc *atv_soc);
@@ -42,7 +45,7 @@ int main(int argc, char *argv[])
 {
     int sockfd, i;
     struct sockaddr_in server;
-    node_ip *n0, *n1, *n2, *n3;
+    struct node_ip *n0, *n1, *n2, *n3;
 
     //socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -78,7 +81,8 @@ int main(int argc, char *argv[])
     ip_table[1]->rear = n3;
 
     // Binding newly created socket to given IP and verification
-    if ((bind(sockfd, (SA*)&server, sizeof(server))) != 0) {
+    if ((bind(sockfd, (struct sockaddr*)&server, sizeof(server))) != 0) 
+    {
         printf("socket bind failed...\n");
         return -1;
     }
@@ -92,7 +96,7 @@ int main(int argc, char *argv[])
     else
     {
         printf("Server listening..\n");
-        selectSolution(sockfd, ip_table);
+        selectSolution(sockfd);
     }
     printf("finish program\n");
     return 0;
@@ -108,6 +112,11 @@ int selectSolution(int sockfd)
     fd_set *readfds;
     socklen_t sin_siz;
     sin_siz = sizeof(client);
+    if((buffer = malloc(BUFFERSIZE)) == NULL)
+    {
+        perror("failed to malloc() for buffer\n");
+        return -1;
+    }
 
     //set timeout
     timeout = malloc(sizeof(struct timeval));
@@ -117,7 +126,7 @@ int selectSolution(int sockfd)
     for(i = 0; i < MaxConnection - 1; i ++)
     {
         atv_socs[i]->fd = 0;
-        atv_socs[i]->ip = client->sin_addr;
+        atv_socs[i]->ip = client.sin_addr.s_addr;
     }
 
     //initialize readfds and set the sockfd
@@ -135,7 +144,7 @@ int selectSolution(int sockfd)
         {
             if(atv_socs[j]->fd > 0)
             {
-                maxfd = (maxfd > atv_socs[j]) ? maxfd : atv_socs[j];
+                maxfd = (maxfd > atv_socs[j]->fd) ? maxfd : atv_socs[j]->fd;
                 FD_SET(atv_socs[j]->fd, readfds);
             }
         }
@@ -147,11 +156,11 @@ int selectSolution(int sockfd)
         {
             for(j = 0; j < MaxConnection; j++)
             {
-                if(FD_ISSET(atv_socs[j], readfds))
+                if(FD_ISSET(atv_socs[j]->fd, readfds))
                 {
                     timeout->tv_sec = 30;
                     timeout->tv_usec = 0;
-                    if (ret = transfer_func(atv_socs[j], ip_table) == 1)
+                    if ((ret = transfer_func(atv_socs[j])) == 1)
                     {
                         //transfer finished
                         gettimeofday(end_t, NULL);
@@ -162,7 +171,7 @@ int selectSolution(int sockfd)
             if(FD_ISSET(sockfd, readfds)) 
             {                                                                  
                 //accept new connection and set connection fd
-                atv_socs[i] = accept(sockfd, (struct sockaddr *)&atv_socs[i]->cli_addr, &sin_siz);
+                atv_socs[i]->fd = accept(sockfd, (struct sockaddr *)&atv_socs[i]->ip, &sin_siz);
                 count ++;     
                 if(count >= 4)
                 {
@@ -195,11 +204,11 @@ int transfer_func(struct active_soc *atv_soc)
     ssize_t len;
     int opposite_fd;
     //search the opposite node to transfer
-    if(atv_soc->ip == ip_table[0]->head->ip->s_addr)
+    if(atv_soc->ip == ip_table[0]->head->ip)
     {
         opposite_fd = ip_table[0]->rear->fd;
     }
-    else if(atv_soc->ip == ip_table[1]->head->ip->s_addr)
+    else if(atv_soc->ip == ip_table[1]->head->ip)
     {
         opposite_fd = ip_table[1]->rear->fd;
     }
@@ -207,7 +216,7 @@ int transfer_func(struct active_soc *atv_soc)
     {
         return 1;
     }
-    while((len = recv(atv_soc->fd, buffer, BUFFERSIZE, MSG_DONTWAIT) > 0)
+    while((len = recv(atv_soc->fd, buffer, BUFFERSIZE, MSG_DONTWAIT) > 0))
     {
         send(opposite_fd, buffer, len, MSG_DONTWAIT);
     }
@@ -218,18 +227,18 @@ int send_start(active_soc* socs[])
 {
     int i;
     ssize_t send_len;
-    start_t = malloc(sizeof(timeval));
-    end_t = malloc(sizeof(timeval));
-    time_result = malloc(sizeof(timeval));
+    start_t = malloc(sizeof(struct timeval));
+    end_t = malloc(sizeof(struct timeval));
+    time_result = malloc(sizeof(struct timeval));
     gettimeofday(start_t, NULL);
-    send_len = sizeof(timeval);
+    send_len = sizeof(struct timeval);
     memcpy(buffer, (const void*)start_t, send_len);
     for(i = 0; i < MaxConnection; i ++)
     {
         if(socs[i]->ip == ip_table[0]->head->ip 
         || socs[i]->ip == ip_table[1]->head->ip)
         {
-            send(socs[i]->fd, buffer, send_len);
+            send(socs[i]->fd, buffer, send_len, 0);
         }
     }
 }

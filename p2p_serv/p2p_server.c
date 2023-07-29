@@ -90,11 +90,11 @@ static void mongoose_stop(lua_State* L)
 /*request callback function*/
 static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data)
 {
-    int ack;
+    int ack, ret;
     struct mg_http_message *hm;
-    struct mg_str *content_type *content_length;
-    char *type_str;
+    struct mg_str *content_type;
     size_t data_size;
+    char* ct_str;
     const char *recv_data;
 
     /*
@@ -108,28 +108,37 @@ static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data)
     {
         hm = (struct mg_http_message *) ev_data;
         content_type = mg_http_get_header(hm, "Content-Type");
-        content_length = mg_http_get_header(hm, "Content-Length");
-        sscanf(content_length->ptr, "%zu", &data_size);
-        recv_data = malloc(atoi(content_length->ptr));
-        memcpy(recv_data, hm->body.ptr, data_size);
-        emcpy(type_str, content_type->ptr, content_type->len);
-        printf("content_type:%s", content_type->ptr);
-        printf("ret:%d", ret);
-        if(strcmp(content_type->ptr, "application/octet-stream") == 0)
+        if((recv_data = malloc(hm->body.len + 1)) == NULL) // one more byte for ending character
         {
-            printf("application/octet-stream");
+            perror("failed to malloc() for http body\n");
+            exit(1);
+        }
+
+        //save http body
+        memcpy(recv_data, hm->body.ptr, hm->body.len + 1);
+        if((ct_str = malloc(content_type->len)) == NULL)
+        {
+            perror("failed to malloc() for http body\n");
+            exit(1);
+        }
+
+        //read content-type header
+        memcpy(ct_str, content_type->ptr, content_type->len);
+        if(strcmp(ct_str, "application/octet-stream") == 0)
+        {
+            printf("application/octet-stream\n");
             ack = 1;
             set_data(recv_data);
             mg_http_reply(c, 200, "", "{%m:%d}\n", MG_ESC("status"), ack); 
         }
-        else if(strcmp(content_type->ptr, "multipart/form-data") == 0)
+        else if(strcmp(ct_str, "multipart/form-data") == 0)
         {
-            printf("multipart/form-data\r\n");
+            printf("multipart/form-data\n");
             multipart_processing(c, recv_data);
             ack = 2;
             mg_http_reply(c, 200, "", "{%m:%d}\n", MG_ESC("status"), ack); 
         }
-        else if(strcmp(content_type->ptr, "text/plain") == 0)
+        else if (strcmp(ct_str, "text/plain") == 0)
         {
             printf("text/plain\n");
             printf("body:%s\n", hm->body.ptr);
@@ -171,7 +180,6 @@ static void set_data(const char *result)
     struct data_node *node;
     node = malloc(sizeof(data_node));
     node->data = result;
-    printf("set data:%s\n", node->data);
     node->prev = queue->rear;
     node->next = NULL;
     queue->rear = node;
@@ -193,7 +201,6 @@ static int get_data(lua_State* L)
             data_node *node;
             printf("data exist\n");
             node = queue->head;
-            printf("data:%s\n", node->data);
             lua_pushstring(L, node->data);
             queue->head = node->next;
             queue->length --;

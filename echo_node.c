@@ -96,7 +96,7 @@ int tcp_connect (char *server, int portno)
 int echo_func(int sock)
 {
     ssize_t len;
-    while((len = recv(sock, buffer, BUFFERSIZE, MSG_WAITALL) > 0)
+    while(len = recv(sock, buffer, BUFFERSIZE, MSG_WAITALL) > 0)
     {
         send(sock, buffer, len, 0);
     }
