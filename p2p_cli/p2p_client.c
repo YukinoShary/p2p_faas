@@ -82,6 +82,6 @@ static const struct luaL_Reg reg_funcs[] =
 
 int luaopen_p2p_client(lua_State *L) 
 {
-    luaL_newlib(L, reg_funcs); bv
+    luaL_newlib(L, reg_funcs); 
     return 1;
 }

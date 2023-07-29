@@ -1,8 +1,8 @@
 print("start client")
 local target_ip = "http://192.168.128.22:8082"
 package.cpath = "/home/shary/program/peer2peer/client.so"
-local func_lib =  require("p2p_client")
-local file = io.open("binary_data", "r")
+local func_lib = require("p2p_client")
+local file = io.open("sendFile", "r")
 if nil == file then
     print("open file fail")
 end
