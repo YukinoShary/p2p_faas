@@ -17,6 +17,7 @@
 struct sockaddr_in server;
 char *buffer[BUFFERSIZE];
 extern int echo_client (char *server, int portno);
+int tcp_connect (char *server, int portno);
 int echo_func(int sock);
 
 int main (int argc, char *argv[])
@@ -47,6 +48,7 @@ int echo_client(char *server, int portno)
   }
   echo_func(sock);
   close(sock);
+  return 0;
 }
 
 int tcp_connect (char *server, int portno)
@@ -96,7 +98,7 @@ int tcp_connect (char *server, int portno)
 int echo_func(int sock)
 {
     ssize_t len;
-    while(len = recv(sock, buffer, BUFFERSIZE, MSG_WAITALL) > 0)
+    while((len = recv(sock, buffer, BUFFERSIZE, MSG_WAITALL)) > 0)
     {
         send(sock, buffer, len, 0);
     }
