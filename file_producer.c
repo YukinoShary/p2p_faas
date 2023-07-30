@@ -17,7 +17,7 @@ int main (int argc, char *argv[])
 {
   char *server, *filename;
   int portno;
-  if (argc != 3) {
+  if (argc != 4) {
     fprintf(stdout, "Usage: %s host port.\n", argv[0]);
     exit(-1);
   }
@@ -32,7 +32,7 @@ int main (int argc, char *argv[])
 
 int send_client(char *server, char* filename, int portno)
 {
-  int sock;
+  int sock, total_send;
   ssize_t send_size;
   char sbuf[BUFFERSIZE];
   FILE *out, *file_fd;
@@ -42,7 +42,7 @@ int send_client(char *server, char* filename, int portno)
     exit (-1);
   }
   
-  if(fdopen_file(filename, file_fd) < 0){
+  if(fdopen_file(filename, &file_fd) < 0){
     fprintf(stderr, "fdopen_file()\n");
     exit(1);
   }
@@ -57,6 +57,7 @@ int send_client(char *server, char* filename, int portno)
   memset(sbuf, 0, BUFFERSIZE);
 
   /* gets buffer */
+  printf("start to send\n");
   while (fread(sbuf, 1, BUFFERSIZE, file_fd)) 
   {
     send_size = send(sock, sbuf, BUFFERSIZE, 0);
@@ -64,6 +65,11 @@ int send_client(char *server, char* filename, int portno)
     {
       perror("error while sending data.\n");
       return -1;
+    }
+    else
+    {
+      total_send += send_size;
+      printf("sending progress:%d/%d\n", total_send, 100 * (1 << 20));
     }
   }
   fclose(file_fd);
@@ -131,7 +137,7 @@ int fdopen_sock(int sock, FILE **outp)
 
 int fdopen_file(char* filename, FILE** file_fd)
 {
-  *file_fd = fopen(filename, "rb");
+  *file_fd = fopen(filename, "r");
   if(*file_fd == NULL)
   {
     perror("file open failed.\n");

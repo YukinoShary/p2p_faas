@@ -3,9 +3,9 @@
 #include <netdb.h>
 #include <stdbool.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <arpa/inet.h>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,13 +68,23 @@ int main(int argc, char *argv[])
     server.sin_port = htons(atoi(argv[1]));
 
     //create the pipeline_ip table for data transfer 
-    n0->ip = inet_addr("192.168.128.26");
-    n1->ip = inet_addr("192.168.128.25");
+    n0 = malloc(sizeof(node_ip));
+    n1 = malloc(sizeof(node_ip));
+    n2 = malloc(sizeof(node_ip));
+    n3 = malloc(sizeof(node_ip));
+
+    n0->ip = inet_addr("192.168.128.27");
+    n1->ip = inet_addr("192.168.128.26");
     n2->ip = inet_addr("192.168.128.24");
     n3->ip = inet_addr("192.168.128.23");
 
     n0->next = n2;
     n1->next = n3;
+
+    for(i = 0; i < 2; i ++)
+    {
+        ip_table[i] = malloc(sizeof(pipeline_ip));
+    }
     ip_table[0]->head = n0;
     ip_table[0]->rear = n2;
     ip_table[1]->head = n1;
@@ -105,13 +115,21 @@ int main(int argc, char *argv[])
 int selectSolution(int sockfd)
 {
     int i, j, maxfd, count, ret, finished; 
-    char *buffer;
     struct sockaddr_in client;
     struct timeval* timeout;
     struct active_soc *atv_socs[MaxConnection];
     fd_set *readfds;
     socklen_t sin_siz;
     sin_siz = sizeof(client);
+    for(i = 0; i < MaxConnection; i++)
+    {
+        atv_socs[i] = malloc(sizeof(active_soc));
+        if((atv_socs[i] = malloc(BUFFERSIZE)) == NULL)
+        {
+            perror("failed to malloc() for atv_socs\n");
+            return -1;
+        }
+    }
     if((buffer = malloc(BUFFERSIZE)) == NULL)
     {
         perror("failed to malloc() for buffer\n");
@@ -133,7 +151,6 @@ int selectSolution(int sockfd)
     readfds = malloc(sizeof(fd_set));
     i = 0;
     count = 0; //include finished connection
-    buffer = malloc(BUFFERSIZE);
     while(1)
     {
         FD_ZERO(readfds); 
@@ -226,21 +243,21 @@ int transfer_func(struct active_soc *atv_soc)
 int send_start(active_soc* socs[])
 {
     int i;
-    ssize_t send_len;
     start_t = malloc(sizeof(struct timeval));
     end_t = malloc(sizeof(struct timeval));
     time_result = malloc(sizeof(struct timeval));
     gettimeofday(start_t, NULL);
-    send_len = sizeof(struct timeval);
-    memcpy(buffer, (const void*)start_t, send_len);
+    memcpy(buffer, start_t, sizeof(start_t));
     for(i = 0; i < MaxConnection; i ++)
     {
         if(socs[i]->ip == ip_table[0]->head->ip 
         || socs[i]->ip == ip_table[1]->head->ip)
         {
-            send(socs[i]->fd, buffer, send_len, 0);
+            send(socs[i]->fd, buffer, sizeof(start_t), 0);
         }
     }
+    printf("start to send data\n");
+    return 0;
 }
 
 /* Subtract the ‘struct timeval’ values X and Y,
