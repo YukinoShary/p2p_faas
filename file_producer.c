@@ -53,7 +53,9 @@ int send_client(char *server, char* filename, int portno)
   }
 
   /* wait for sending signal(data page) and clear buffer*/
+  printf("wait for sending signal.\n");
   recv(sock, sbuf, BUFFERSIZE, 0);
+  printf("data:%s\n", sbuf);
   memset(sbuf, 0, BUFFERSIZE);
 
   /* gets buffer */

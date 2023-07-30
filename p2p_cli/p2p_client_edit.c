@@ -22,6 +22,9 @@ static void curl_init(lua_State *L)
     n = luaL_checknumber(L, 1);
     curl = curl_easy_init();
     //time start
+    start_t = malloc(sizeof(timeval));
+    end_t = malloc(sizeof(timeval));
+    time_result = malloc(sizeof(timeval));
     gettimeofday(start_t, NULL);
     /*Determine the mode by the number of args*/
     switch(n)

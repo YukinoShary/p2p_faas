@@ -100,8 +100,9 @@ int echo_func(int sock)
     ssize_t len;
     while((len = recv(sock, buffer, BUFFERSIZE, MSG_WAITALL)) > 0)
     {
-      send(sock, buffer, len, 0);
+      //send(sock, buffer, len, 0);
     }
     printf("sendding finished\n");
+    close(sock);
     return 0;
 }

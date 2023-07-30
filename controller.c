@@ -35,6 +35,8 @@ typedef struct active_soc
 } active_soc;
 
 char *buffer;
+size_t final_data;
+int close_sock;
 struct pipeline_ip *ip_table[2]; //3 pipelines to be controlled
 struct timeval *start_t, *end_t, *time_result;
 int selectSolution(int sockfd);
@@ -117,14 +119,15 @@ int selectSolution(int sockfd)
     int i, j, maxfd, count, ret, finished; 
     struct sockaddr_in client;
     struct timeval* timeout;
-    struct active_soc *atv_socs[MaxConnection];
+    struct active_soc* atv_socs[MaxConnection];
     fd_set *readfds;
     socklen_t sin_siz;
+
     sin_siz = sizeof(client);
+    finished = 0;
     for(i = 0; i < MaxConnection; i++)
     {
-        atv_socs[i] = malloc(sizeof(active_soc));
-        if((atv_socs[i] = malloc(BUFFERSIZE)) == NULL)
+        if((atv_socs[i] = malloc(sizeof(active_soc))) == NULL)
         {
             perror("failed to malloc() for atv_socs\n");
             return -1;
@@ -140,12 +143,6 @@ int selectSolution(int sockfd)
     timeout = malloc(sizeof(struct timeval));
     timeout->tv_sec = 30;
     timeout->tv_usec = 0;
-
-    for(i = 0; i < MaxConnection - 1; i ++)
-    {
-        atv_socs[i]->fd = 0;
-        atv_socs[i]->ip = client.sin_addr.s_addr;
-    }
 
     //initialize readfds and set the sockfd
     readfds = malloc(sizeof(fd_set));
@@ -181,23 +178,38 @@ int selectSolution(int sockfd)
                     {
                         //transfer finished
                         gettimeofday(end_t, NULL);
-                        finished ++;
+                        finished = 1;
+                        break;
                     }
                 }
             }
             if(FD_ISSET(sockfd, readfds)) 
             {                                                                  
                 //accept new connection and set connection fd
-                atv_socs[i]->fd = accept(sockfd, (struct sockaddr *)&atv_socs[i]->ip, &sin_siz);
-                count ++;     
+                atv_socs[i]->fd = accept(sockfd, (struct sockaddr *)&client, &sin_siz);
+                atv_socs[i]->ip = client.sin_addr.s_addr;
+                printf("ip:%s\n", inet_ntoa(*((struct in_addr*)&atv_socs[i]->ip)));
+                count ++;
+                //set fd set in ip_table
+                if(atv_socs[i]->ip == ip_table[0]->rear->ip)
+                {
+                    ip_table[0]->rear->fd = atv_socs[i]->fd;
+                }
+                if(atv_socs[i]->ip == ip_table[1]->rear->ip)
+                {
+                    ip_table[1]->rear->fd = atv_socs[i]->fd;
+                }
+
                 if(count >= 4)
                 {
                     send_start(atv_socs);
                 }  
+
+                i ++;
                 timeout->tv_sec = 30;
-                timeout->tv_usec = 0;      
+                timeout->tv_usec = 0;
             }
-            if(finished >= 2)
+            if(finished == 1)
                 break;
         }      
     }
@@ -210,6 +222,7 @@ int selectSolution(int sockfd)
     {
         printf("used time: %ld.%06ld\n", time_result->tv_sec, time_result->tv_usec);
     }
+    close(sockfd);
     free(start_t);
     free(end_t);
     free(time_result);
@@ -218,7 +231,7 @@ int selectSolution(int sockfd)
 
 int transfer_func(struct active_soc *atv_soc)
 {
-    ssize_t len;
+    ssize_t len, sd;
     int opposite_fd;
     //search the opposite node to transfer
     if(atv_soc->ip == ip_table[0]->head->ip)
@@ -229,33 +242,53 @@ int transfer_func(struct active_soc *atv_soc)
     {
         opposite_fd = ip_table[1]->rear->fd;
     }
-    else
+    else if(atv_soc->ip == ip_table[0]->rear->ip
+    ||atv_soc->ip == ip_table[1]->rear->ip)
     {
-        return 1;
+        opposite_fd = -1;
+        return 0;
     }
     while((len = recv(atv_soc->fd, buffer, BUFFERSIZE, MSG_DONTWAIT) > 0))
     {
-        send(opposite_fd, buffer, len, MSG_DONTWAIT);
+        if(len == -1 && errno != 11)
+        {
+            printf("socket close + 1\n");
+            close(atv_soc->fd);
+            close_sock ++;
+        }
+        sd = send(opposite_fd, buffer, len, 0);
     }
+    printf("data:%zu\n", final_data);
+    if(close_sock >= 2)
+        return 1;
+    if(final_data >= 200 * (1 << 20))
+        return 1;
     return 0;
 }
 
 int send_start(active_soc* socs[])
 {
-    int i;
+    int i, j;
+    char *str, *sbuf;
+    printf("start sending\n");
     start_t = malloc(sizeof(struct timeval));
     end_t = malloc(sizeof(struct timeval));
     time_result = malloc(sizeof(struct timeval));
     gettimeofday(start_t, NULL);
-    memcpy(buffer, start_t, sizeof(start_t));
-    for(i = 0; i < MaxConnection; i ++)
+    sbuf = malloc(BUFFERSIZE);
+    memset(sbuf, 1, BUFFERSIZE);
+    //memset(buffer, 1, sizeof(BUFFERSIZE));
+    //send multiple times to avoid the blocking by the blocking socket 
+    for(i = 0; i < MaxConnection; i++)
     {
         if(socs[i]->ip == ip_table[0]->head->ip 
         || socs[i]->ip == ip_table[1]->head->ip)
-        {
-            send(socs[i]->fd, buffer, sizeof(start_t), 0);
+        { 
+            send(socs[i]->fd, sbuf, BUFFERSIZE, 0);
+            printf("socs ip:%s\n", inet_ntoa(*((struct in_addr*)&socs[i]->ip)));
         }
     }
+    free(sbuf);
     printf("start to send data\n");
     return 0;
 }
