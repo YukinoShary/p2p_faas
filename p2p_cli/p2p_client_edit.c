@@ -4,8 +4,7 @@
 #include <lua5.4/lua.h>
 #include <lua5.4/lualib.h>
 #include <lua5.4/lauxlib.h>
-
-struct timeval *start_t, *end_t, *time_result;
+#include <sys/time.h>
 
 static void curl_init(lua_State *lua_S);
 int luaopen_p2p_client(lua_State *L);
@@ -15,16 +14,20 @@ int timeval_subtract (struct timeval *result, struct timeval *x, struct timeval 
 static void curl_init(lua_State *L)
 {
     int n, ret;
+    FILE *fd;
     printf("start to initialize a client\n");
     char *send_data, *target_ip;
+    struct stat file_info;
     CURL *curl;
+    curl_off_t speed_upload, total_time;
     struct curl_slist *hs = NULL;
+    struct timeval *start_t, *end_t, *time_result;
     n = luaL_checknumber(L, 1);
     curl = curl_easy_init();
     //time start
-    start_t = malloc(sizeof(timeval));
-    end_t = malloc(sizeof(timeval));
-    time_result = malloc(sizeof(timeval));
+    start_t = malloc(sizeof(struct timeval));
+    end_t = malloc(sizeof(struct timeval));
+    time_result = malloc(sizeof(struct timeval));
     gettimeofday(start_t, NULL);
     /*Determine the mode by the number of args*/
     switch(n)
@@ -57,21 +60,37 @@ static void curl_init(lua_State *L)
         /* chunked transfer */
         target_ip = lua_tostring(L, 2);
         send_data = lua_tostring(L, 3); 
+        fd = fopen(send_data, "rb");
+        if(fstat(fileno(fd), &file_info) != 0)
+            return 1;
         if(curl)
         {
             CURLcode ret;
             curl_easy_setopt(curl, CURLOPT_URL, target_ip);
             curl_easy_setopt(curl, CURLOPT_POST, 1L);
+            curl_easy_setopt(curl, CURLOPT_READDATA, fd);
+            curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE,
+                     (curl_off_t)file_info.st_size);
             hs = curl_slist_append(hs, "Transfer-Encoding: chunked");
             hs = curl_slist_append(hs, "Content-Type: application/octet-stream");
+            curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hs);
-            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, send_data);
             printf("set option\n");
             ret = curl_easy_perform(curl);
             printf("post send\n");
             if(ret != CURLE_OK)
             {
                 curl_easy_strerror(ret);
+            }
+            else
+            {
+                curl_easy_getinfo(curl, CURLINFO_SPEED_UPLOAD_T, &speed_upload);
+                curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME_T, &total_time);
+
+                fprintf(stderr, "Speed: %lu bytes/sec during %lu.%06lu seconds\n",
+                (unsigned long)speed_upload,
+                (unsigned long)(total_time / 1000000),
+                (unsigned long)(total_time % 1000000));
             }
             curl_slist_free_all(hs);
             gettimeofday(end_t, NULL);
@@ -91,7 +110,10 @@ static void curl_init(lua_State *L)
     free(start_t);
     free(end_t);
     free(time_result);
+    fclose(fd);
 }
+
+static 
 
 static const struct luaL_Reg reg_funcs[] = 
 {

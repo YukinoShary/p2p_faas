@@ -128,6 +128,7 @@ static void fn(struct mg_connection *c, int ev, void *ev_data, void *fn_data)
         {
             printf("application/octet-stream\n");
             ack = 1;
+            printf("body:%s\n", hm->body.ptr);
             set_data(recv_data);
             mg_http_reply(c, 200, "", "{%m:%d}\n", MG_ESC("status"), ack); 
         }

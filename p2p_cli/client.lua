@@ -8,5 +8,5 @@ if nil == file then
 end
 io.input(file)
 local send_data = io.read("all")
-io.close(file)
 print(func_lib.cli_send(2, target_ip, send_data))
+io.close(file)
