@@ -33,10 +33,11 @@ int main (int argc, char *argv[])
 int send_client(char *server, char* filename, int portno)
 {
   int sock, total_send;
+  ssize_t read_size;
   ssize_t send_size;
   char sbuf[BUFFERSIZE];
   FILE *out, *file_fd;
-  
+  total_send = 0;
   sock = tcp_connect (server, portno);
   if (sock < 0) {
     exit (-1);
@@ -60,13 +61,17 @@ int send_client(char *server, char* filename, int portno)
 
   /* gets buffer */
   printf("start to send\n");
-  while (fread(sbuf, 1, BUFFERSIZE, file_fd)) 
+  while (1) 
   {
-    send_size = send(sock, sbuf, BUFFERSIZE, 0);
+    read_size = fread(sbuf, 1, BUFFERSIZE, file_fd);
+    if(read_size > 0)
+      send_size = send(sock, sbuf, read_size, 0);
+    else 
+      break;
     if(send_size == -1)
     {
       perror("error while sending data.\n");
-      return -1;
+      break;
     }
     else
     {
@@ -76,6 +81,7 @@ int send_client(char *server, char* filename, int portno)
   }
   fclose(file_fd);
   fclose(out);
+  close(sock);
   return 0;
 }
 

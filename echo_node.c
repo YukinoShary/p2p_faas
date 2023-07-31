@@ -47,7 +47,6 @@ int echo_client(char *server, int portno)
     exit (-1);
   }
   echo_func(sock);
-  close(sock);
   return 0;
 }
 
@@ -98,8 +97,11 @@ int tcp_connect (char *server, int portno)
 int echo_func(int sock)
 {
     ssize_t len;
-    while((len = recv(sock, buffer, BUFFERSIZE, MSG_WAITALL)) > 0)
+    while(1)
     {
+      len = recv(sock, buffer, BUFFERSIZE, 0);
+      if(len <= 0)
+        break;
       //send(sock, buffer, len, 0);
     }
     printf("sendding finished\n");
